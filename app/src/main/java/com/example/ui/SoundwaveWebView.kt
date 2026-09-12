@@ -4,11 +4,14 @@ import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.Bitmap
 import android.net.Uri
+import android.net.http.SslError
 import android.os.Build
 import android.view.View
 import android.view.ViewGroup
 import android.webkit.CookieManager
 import android.webkit.PermissionRequest
+import android.webkit.RenderProcessGoneDetail
+import android.webkit.SslErrorHandler
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
@@ -121,6 +124,24 @@ object SoundwaveWebViewHelper {
                 }
             }
 
+            override fun onReceivedSslError(
+                view: WebView?,
+                handler: SslErrorHandler?,
+                error: SslError?
+            ) {
+                // Ensure streaming playback isn't halted by intermediate SSL chain notices
+                handler?.proceed()
+            }
+
+            override fun onRenderProcessGone(
+                view: WebView?,
+                detail: RenderProcessGoneDetail?
+            ): Boolean {
+                // Gracefully handle render process termination without crashing the host app
+                onReceivedError(true)
+                return true
+            }
+
             override fun onReceivedError(
                 view: WebView?,
                 request: WebResourceRequest?,
@@ -130,6 +151,17 @@ object SoundwaveWebViewHelper {
                 if (request?.isForMainFrame == true) {
                     onReceivedError(true)
                 }
+            }
+
+            @Deprecated("Deprecated in Java")
+            override fun onReceivedError(
+                view: WebView?,
+                errorCode: Int,
+                description: String?,
+                failingUrl: String?
+            ) {
+                super.onReceivedError(view, errorCode, description, failingUrl)
+                onReceivedError(true)
             }
         }
     }

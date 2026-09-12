@@ -65,11 +65,9 @@ class NetworkMonitor(private val context: Context) {
         ) {
             super.onCapabilitiesChanged(network, networkCapabilities)
             val hasInternet = networkCapabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
-            val validated = networkCapabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
-            val isConnected = hasInternet && validated
             val typeName = resolveCapabilitiesType(networkCapabilities)
 
-            if (isConnected) {
+            if (hasInternet) {
                 activeNetworks.add(network)
                 _isOnline.value = true
                 _networkType.value = typeName
