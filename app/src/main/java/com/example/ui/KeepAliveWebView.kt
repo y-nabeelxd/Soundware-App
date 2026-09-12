@@ -3,19 +3,42 @@ package com.example.ui
 import android.annotation.SuppressLint
 import android.content.Context
 import android.util.AttributeSet
+import android.view.MotionEvent
 import android.view.View
+import android.view.inputmethod.InputMethodManager
 import android.webkit.WebView
 
 /**
- * Custom WebView that maintains persistent rendering and execution state
- * for YouTube Iframe and Web Audio even when the host Activity loses window focus,
- * is minimized, or the device screen is locked.
+ * Custom WebView that:
+ * 1. Maintains persistent rendering and execution state for audio in background
+ * 2. Fully supports Android soft keyboard (IME) input for search, playlist editing, and inputs
+ * 3. Bridges media control operations (play, pause, next, prev, seek)
  */
 class KeepAliveWebView @JvmOverloads constructor(
     context: Context,
     attrs: AttributeSet? = null,
     defStyleAttr: Int = 0
 ) : WebView(context, attrs, defStyleAttr) {
+
+    init {
+        // Crucial for software keyboard input inside WebView
+        isFocusable = true
+        isFocusableInTouchMode = true
+    }
+
+    override fun onCheckIsTextEditor(): Boolean {
+        // Informs Android InputMethodManager that this view accepts text input
+        return true
+    }
+
+    override fun onTouchEvent(event: MotionEvent): Boolean {
+        if (event.action == MotionEvent.ACTION_DOWN) {
+            if (!hasFocus()) {
+                requestFocus()
+            }
+        }
+        return super.onTouchEvent(event)
+    }
 
     override fun onWindowVisibilityChanged(visibility: Int) {
         // ALWAYS signal VISIBLE to Chromium's internal compositor so background
@@ -32,12 +55,27 @@ class KeepAliveWebView @JvmOverloads constructor(
     }
 
     override fun onWindowFocusChanged(hasWindowFocus: Boolean) {
-        // Always report window focus as true so media session and audio timers stay active
         super.onWindowFocusChanged(true)
     }
 
     override fun hasWindowFocus(): Boolean {
         return true
+    }
+
+    fun showKeyboard() {
+        post {
+            requestFocus(View.FOCUS_DOWN)
+            val imm = context.getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager
+            imm?.showSoftInput(this, InputMethodManager.SHOW_IMPLICIT)
+        }
+    }
+
+    fun hideKeyboard() {
+        post {
+            val imm = context.getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager
+            imm?.hideSoftInputFromWindow(windowToken, 0)
+            clearFocus()
+        }
     }
 
     fun playPause() {
@@ -46,7 +84,7 @@ class KeepAliveWebView @JvmOverloads constructor(
                 """
                 (function() {
                     try {
-                        if (window.__soundwavePlayPause) {
+                        if (typeof window.__soundwavePlayPause === 'function') {
                             window.__soundwavePlayPause();
                             return;
                         }
@@ -69,7 +107,7 @@ class KeepAliveWebView @JvmOverloads constructor(
                 """
                 (function() {
                     try {
-                        if (window.__soundwaveNext) {
+                        if (typeof window.__soundwaveNext === 'function') {
                             window.__soundwaveNext();
                             return;
                         }
@@ -91,7 +129,7 @@ class KeepAliveWebView @JvmOverloads constructor(
                 """
                 (function() {
                     try {
-                        if (window.__soundwavePrevious) {
+                        if (typeof window.__soundwavePrevious === 'function') {
                             window.__soundwavePrevious();
                             return;
                         }

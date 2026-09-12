@@ -19,6 +19,7 @@ import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import com.example.media.SoundwaveMediaBridge
+import java.lang.ref.WeakReference
 
 object SoundwaveWebViewHelper {
 
@@ -29,6 +30,7 @@ object SoundwaveWebViewHelper {
     // 2. Extracts currently playing track metadata (title, artist, artwork, position, duration) & playback state
     // 3. Reports state and live progress to AndroidMediaBridge so the notification progress bar moves like Spotify
     // 4. Exposes direct hooks (playPause, next, previous, seek) for native notification actions
+    // 5. Automatically detects touches and focus on input/search/playlist elements and requests native keyboard
     const val INJECTED_MEDIA_BRIDGE_JS = """
         (function() {
             try {
@@ -48,6 +50,32 @@ object SoundwaveWebViewHelper {
                 document.addEventListener('visibilitychange', function(e) {
                     e.stopImmediatePropagation();
                 }, true);
+
+                // Ensure touch/click on any input or editable element requests the Android software keyboard
+                function attachKeyboardListeners() {
+                    function handleInputActivation(e) {
+                        var target = e.target;
+                        while (target && target !== document.body) {
+                            var tag = (target.tagName || '').toLowerCase();
+                            var isInput = tag === 'input' || tag === 'textarea' || target.isContentEditable;
+                            if (isInput) {
+                                if (window.AndroidMediaBridge && typeof window.AndroidMediaBridge.showKeyboard === 'function') {
+                                    window.AndroidMediaBridge.showKeyboard();
+                                }
+                                break;
+                            }
+                            target = target.parentElement;
+                        }
+                    }
+
+                    document.addEventListener('focusin', handleInputActivation, true);
+                    document.addEventListener('click', handleInputActivation, true);
+                    document.addEventListener('touchstart', handleInputActivation, { passive: true, capture: true });
+                }
+                if (!window.__soundwaveKeyboardAttached) {
+                    window.__soundwaveKeyboardAttached = true;
+                    attachKeyboardListeners();
+                }
 
                 // Hook YouTube Player constructor to retain direct reference for precise timing & seeking
                 function hookYouTubeAPI() {
@@ -258,9 +286,14 @@ object SoundwaveWebViewHelper {
             userAgentString = rawUa.replace("; wv", "").replace("Version/4.0 ", "")
         }
 
-        // Add JavaScript bridge for Android MediaSession communication
+        // Enable touch and keyboard focus
+        webView.isFocusable = true
+        webView.isFocusableInTouchMode = true
+        webView.requestFocus(View.FOCUS_DOWN)
+
+        // Add JavaScript bridge for Android MediaSession and Keyboard communication
         webView.addJavascriptInterface(
-            SoundwaveMediaBridge(webView.context.applicationContext),
+            SoundwaveMediaBridge(webView.context.applicationContext, WeakReference(webView)),
             "AndroidMediaBridge"
         )
 
@@ -336,8 +369,10 @@ object SoundwaveWebViewHelper {
                 request: WebResourceRequest?,
                 error: WebResourceError?
             ) {
-                super.onReceivedError(view, request, error)
                 if (request?.isForMainFrame == true) {
+                    view?.stopLoading()
+                    // Never allow the default ugly Chromium "net::ERR_INTERNET_DISCONNECTED" page to display
+                    view?.loadDataWithBaseURL(null, "<html><body style='background:#121212;'></body></html>", "text/html", "utf-8", null)
                     onReceivedError(true)
                 }
             }
@@ -349,10 +384,10 @@ object SoundwaveWebViewHelper {
                 description: String?,
                 failingUrl: String?
             ) {
-                super.onReceivedError(view, errorCode, description, failingUrl)
-                if (failingUrl == null || failingUrl == TARGET_URL || failingUrl.startsWith(TARGET_URL)) {
-                    onReceivedError(true)
-                }
+                view?.stopLoading()
+                // Never allow the default ugly Chromium error page to display
+                view?.loadDataWithBaseURL(null, "<html><body style='background:#121212;'></body></html>", "text/html", "utf-8", null)
+                onReceivedError(true)
             }
         }
     }

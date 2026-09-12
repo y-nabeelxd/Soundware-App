@@ -4,7 +4,6 @@ import android.Manifest
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
-import android.view.View
 import android.view.ViewGroup
 import android.widget.Toast
 import androidx.activity.ComponentActivity
@@ -19,14 +18,12 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.isImeVisible
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -37,6 +34,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import androidx.core.view.WindowCompat
@@ -110,9 +109,6 @@ class MainActivity : ComponentActivity() {
 
     override fun onPause() {
         super.onPause()
-        // CRITICAL FOR AUDIO RETENTION:
-        // DO NOT call webViewInstance?.onPause()
-        // Keep timers running and ensure keep-alive JS is active
         webViewInstance?.let { webView ->
             webView.resumeTimers()
             SoundwaveWebViewHelper.injectMediaBridge(webView)
@@ -121,7 +117,6 @@ class MainActivity : ComponentActivity() {
 
     override fun onStop() {
         super.onStop()
-        // DO NOT pause timers or webview; background audio continues uninterrupted
         webViewInstance?.let { webView ->
             webView.resumeTimers()
             SoundwaveWebViewHelper.injectMediaBridge(webView)
@@ -145,12 +140,21 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
-        super.onDestroy()
         MediaStateManager.setActionListener(null)
         networkMonitor.stopMonitoring()
+        if (isFinishing) {
+            // When app is closed by the user, terminate all background services, wake locks, and notifications
+            BackgroundAudioService.stopService(this)
+            try {
+                webViewInstance?.destroy()
+            } catch (ignored: Exception) {}
+            webViewInstance = null
+        }
+        super.onDestroy()
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun SoundwaveApp(
     networkMonitor: NetworkMonitor,
@@ -160,11 +164,15 @@ fun SoundwaveApp(
 ) {
     val context = LocalContext.current
     val isOnline by networkMonitor.isOnline.collectAsState()
+    val isImeOpen = WindowInsets.isImeVisible
+    val keyboardController = LocalSoftwareKeyboardController.current
+    val focusManager = LocalFocusManager.current
 
     var isPageLoaded by remember { mutableStateOf(false) }
     var splashProgress by remember { mutableFloatStateOf(0.1f) }
     var isSplashFinished by remember { mutableStateOf(false) }
     var hasFatalWebError by remember { mutableStateOf(false) }
+    var wasOfflineBefore by remember { mutableStateOf(false) }
     var lastBackPressTime by remember { mutableLongStateOf(0L) }
 
     // Request notification permission on Android 13+ for foreground notification
@@ -188,7 +196,7 @@ fun SoundwaveApp(
     LaunchedEffect(isPageLoaded) {
         if (isPageLoaded) {
             splashProgress = 1.0f
-            delay(500) // Small visual completion buffer
+            delay(400)
             isSplashFinished = true
         } else {
             // Safety timeout: transition after 3.5 seconds even if page is slow,
@@ -201,21 +209,35 @@ fun SoundwaveApp(
         }
     }
 
-    // Hot-Recovery Signal Engine:
-    // When network reconnects, reload web view if previously failed
+    // Live Instant Network Watchdog:
+    // Tracks network drops and automatically refreshes website when reconnected
     LaunchedEffect(isOnline) {
-        if (isOnline) {
-            val webView = onGetWebView()
-            if (hasFatalWebError || webView?.url == null) {
+        if (!isOnline) {
+            wasOfflineBefore = true
+        } else {
+            // Network restored! Refresh website immediately without showing error pages
+            if (wasOfflineBefore || hasFatalWebError) {
                 hasFatalWebError = false
+                wasOfflineBefore = false
+                val webView = onGetWebView()
                 webView?.loadUrl(SoundwaveWebViewHelper.TARGET_URL)
             }
         }
     }
 
-    // Back Navigation Handler
+    // Back Navigation Handler:
+    // 1. If keyboard is open -> hide keyboard first (standard Android UX)
+    // 2. If webView can go back -> go back in web history
+    // 3. If on root screen -> double press to exit
     BackHandler(enabled = isSplashFinished) {
         val webView = onGetWebView()
+        if (isImeOpen) {
+            webView?.hideKeyboard()
+            keyboardController?.hide()
+            focusManager.clearFocus()
+            return@BackHandler
+        }
+
         if (webView != null && webView.canGoBack()) {
             webView.goBack()
         } else {
@@ -267,6 +289,7 @@ fun SoundwaveApp(
                     onReceivedError = { isFatal ->
                         if (isFatal) {
                             hasFatalWebError = true
+                            networkMonitor.notifyNetworkError()
                         }
                     }
                 )
@@ -276,15 +299,17 @@ fun SoundwaveApp(
                 webView
             },
             update = {
-                // Continuously maintained active in background layer
+                // Continuously maintained active
             }
         )
 
-        // Instant Network Watchdog Offline Overlay Screen
+        // Instant Network Watchdog Offline Screen
+        // Detects disconnection immediately like YouTube and Spotify,
+        // and hides the webview so Chromium's net::ERR_INTERNET_DISCONNECTED is never visible
         AnimatedVisibility(
-            visible = !isOnline || (hasFatalWebError && !isOnline),
-            enter = fadeIn(animationSpec = tween(250)),
-            exit = fadeOut(animationSpec = tween(250)),
+            visible = !isOnline || hasFatalWebError,
+            enter = fadeIn(animationSpec = tween(200)),
+            exit = fadeOut(animationSpec = tween(200)),
             modifier = Modifier.fillMaxSize()
         ) {
             OfflineScreen(

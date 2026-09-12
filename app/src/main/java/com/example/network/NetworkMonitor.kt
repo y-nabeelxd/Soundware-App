@@ -4,14 +4,11 @@ import android.content.Context
 import android.net.ConnectivityManager
 import android.net.Network
 import android.net.NetworkCapabilities
-import android.net.NetworkRequest
+import android.os.Build
 import com.example.data.ConnectivityRepository
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.launch
 
 class NetworkMonitor(private val context: Context) {
 
@@ -26,12 +23,9 @@ class NetworkMonitor(private val context: Context) {
     private val _networkType = MutableStateFlow(getInitialNetworkType())
     val networkType: StateFlow<String> = _networkType.asStateFlow()
 
-    private val activeNetworks = mutableSetOf<Network>()
-
-    private val networkCallback = object : ConnectivityManager.NetworkCallback() {
+    private val defaultNetworkCallback = object : ConnectivityManager.NetworkCallback() {
         override fun onAvailable(network: Network) {
             super.onAvailable(network)
-            activeNetworks.add(network)
             val typeName = resolveNetworkTypeName(network)
             _networkType.value = typeName
             val wasOffline = !_isOnline.value
@@ -40,23 +34,20 @@ class NetworkMonitor(private val context: Context) {
             repository.logStatus(
                 status = if (wasOffline) "RECONNECTED" else "ONLINE",
                 networkType = typeName,
-                details = "Hardware path established via onAvailable"
+                details = "Instant hardware default network established"
             )
         }
 
         override fun onLost(network: Network) {
             super.onLost(network)
-            activeNetworks.remove(network)
-            val hasRemaining = activeNetworks.isNotEmpty() || checkInitialConnectivity()
-            if (!hasRemaining) {
-                _isOnline.value = false
-                _networkType.value = "NONE"
-                repository.logStatus(
-                    status = "OFFLINE",
-                    networkType = "NONE",
-                    details = "Hardware signal dropped via onLost"
-                )
-            }
+            // Default active network was dropped - trigger offline status instantly
+            _isOnline.value = false
+            _networkType.value = "NONE"
+            repository.logStatus(
+                status = "OFFLINE",
+                networkType = "NONE",
+                details = "Default network dropped immediately"
+            )
         }
 
         override fun onCapabilitiesChanged(
@@ -65,12 +56,14 @@ class NetworkMonitor(private val context: Context) {
         ) {
             super.onCapabilitiesChanged(network, networkCapabilities)
             val hasInternet = networkCapabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
-            val typeName = resolveCapabilitiesType(networkCapabilities)
+            val isValidated = networkCapabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
 
-            if (hasInternet) {
-                activeNetworks.add(network)
+            if (hasInternet && isValidated) {
                 _isOnline.value = true
-                _networkType.value = typeName
+                _networkType.value = resolveCapabilitiesType(networkCapabilities)
+            } else if (!hasInternet) {
+                _isOnline.value = false
+                _networkType.value = "NONE"
             }
         }
     }
@@ -78,23 +71,31 @@ class NetworkMonitor(private val context: Context) {
     fun startMonitoring() {
         connectivityManager?.let { cm ->
             try {
-                val request = NetworkRequest.Builder()
-                    .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
-                    .build()
-                cm.registerNetworkCallback(request, networkCallback)
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                    // Modern Android: registerDefaultNetworkCallback tracks the active default network with zero latency
+                    cm.registerDefaultNetworkCallback(defaultNetworkCallback)
+                } else {
+                    @Suppress("DEPRECATION")
+                    val request = android.net.NetworkRequest.Builder()
+                        .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+                        .build()
+                    cm.registerNetworkCallback(request, defaultNetworkCallback)
+                }
             } catch (e: Exception) {
-                // Fallback to registerDefaultNetworkCallback if supported
-                try {
-                    cm.registerDefaultNetworkCallback(networkCallback)
-                } catch (ignored: Exception) {}
+                _isOnline.value = checkInitialConnectivity()
             }
         }
     }
 
     fun stopMonitoring() {
         try {
-            connectivityManager?.unregisterNetworkCallback(networkCallback)
+            connectivityManager?.unregisterNetworkCallback(defaultNetworkCallback)
         } catch (ignored: Exception) {}
+    }
+
+    fun notifyNetworkError() {
+        _isOnline.value = false
+        _networkType.value = "NONE"
     }
 
     private fun checkInitialConnectivity(): Boolean {

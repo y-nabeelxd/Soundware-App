@@ -97,7 +97,7 @@ class BackgroundAudioService : Service() {
         val track = MediaStateManager.trackState.value
         updateNotificationAndSession(track)
 
-        return START_STICKY
+        return START_NOT_STICKY
     }
 
     private fun setupMediaSession() {
@@ -378,12 +378,35 @@ class BackgroundAudioService : Service() {
 
     override fun onBind(intent: Intent?): IBinder? = null
 
-    override fun onDestroy() {
-        super.onDestroy()
-        serviceScope.cancel()
-        mediaSession?.isActive = false
-        mediaSession?.release()
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        super.onTaskRemoved(rootIntent)
+        cleanupAndStop()
+    }
+
+    private fun cleanupAndStop() {
+        try {
+            serviceScope.cancel()
+        } catch (ignored: Exception) {}
+        try {
+            mediaSession?.isActive = false
+            mediaSession?.release()
+            mediaSession = null
+        } catch (ignored: Exception) {}
         abandonAudioFocus()
         releaseWakeLock()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            stopForeground(STOP_FOREGROUND_REMOVE)
+        } else {
+            @Suppress("DEPRECATION")
+            stopForeground(true)
+        }
+        val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
+        notificationManager?.cancel(NOTIFICATION_ID)
+        stopSelf()
+    }
+
+    override fun onDestroy() {
+        cleanupAndStop()
+        super.onDestroy()
     }
 }

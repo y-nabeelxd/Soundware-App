@@ -6,11 +6,16 @@ import android.webkit.JavascriptInterface
 import coil.ImageLoader
 import coil.request.ImageRequest
 import coil.request.SuccessResult
+import com.example.ui.KeepAliveWebView
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import java.lang.ref.WeakReference
 
-class SoundwaveMediaBridge(private val context: Context) {
+class SoundwaveMediaBridge(
+    private val context: Context,
+    private val webViewRef: WeakReference<KeepAliveWebView>? = null
+) {
 
     private val scope = CoroutineScope(Dispatchers.IO)
     private val imageLoader = ImageLoader(context)
@@ -56,6 +61,18 @@ class SoundwaveMediaBridge(private val context: Context) {
     @JavascriptInterface
     fun onPlaybackChanged(isPlaying: Boolean) {
         MediaStateManager.updatePlaybackState(isPlaying)
+    }
+
+    @JavascriptInterface
+    fun showKeyboard() {
+        val webView = webViewRef?.get()
+        webView?.showKeyboard()
+    }
+
+    @JavascriptInterface
+    fun hideKeyboard() {
+        val webView = webViewRef?.get()
+        webView?.hideKeyboard()
     }
 
     private fun loadArtwork(url: String) {
