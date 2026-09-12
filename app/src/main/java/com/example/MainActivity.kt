@@ -6,8 +6,6 @@ import android.os.Build
 import android.os.Bundle
 import android.view.View
 import android.view.ViewGroup
-import android.webkit.WebView
-import android.widget.FrameLayout
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
@@ -21,7 +19,12 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -36,8 +39,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import com.example.media.MediaStateManager
 import com.example.network.NetworkMonitor
 import com.example.service.BackgroundAudioService
+import com.example.ui.KeepAliveWebView
 import com.example.ui.OfflineScreen
 import com.example.ui.SplashScreen
 import com.example.ui.SoundwaveWebViewHelper
@@ -48,11 +55,34 @@ import kotlinx.coroutines.delay
 class MainActivity : ComponentActivity() {
 
     private lateinit var networkMonitor: NetworkMonitor
-    private var webViewInstance: WebView? = null
+    private var webViewInstance: KeepAliveWebView? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+
+        // Configure system StatusBar explicitly:
+        // Ensures status bar is enabled, clearly visible, with high-contrast light icons on dark theme
+        val windowInsetsController = WindowCompat.getInsetsController(window, window.decorView)
+        windowInsetsController.isAppearanceLightStatusBars = false // White text/icons on dark background
+        windowInsetsController.isAppearanceLightNavigationBars = false
+        windowInsetsController.show(WindowInsetsCompat.Type.statusBars())
+        windowInsetsController.show(WindowInsetsCompat.Type.navigationBars())
+
+        // Connect MediaStateManager actions (from notification / lockscreen) to WebView
+        MediaStateManager.setActionListener(object : MediaStateManager.MediaActionListener {
+            override fun onPlayPause() {
+                webViewInstance?.playPause()
+            }
+
+            override fun onNext() {
+                webViewInstance?.nextTrack()
+            }
+
+            override fun onPrevious() {
+                webViewInstance?.previousTrack()
+            }
+        })
 
         // Start native hardware network watchdog
         networkMonitor = NetworkMonitor(this).apply {
@@ -81,7 +111,7 @@ class MainActivity : ComponentActivity() {
         // Keep timers running and ensure keep-alive JS is active
         webViewInstance?.let { webView ->
             webView.resumeTimers()
-            SoundwaveWebViewHelper.injectKeepAlive(webView)
+            SoundwaveWebViewHelper.injectMediaBridge(webView)
         }
     }
 
@@ -90,7 +120,7 @@ class MainActivity : ComponentActivity() {
         // DO NOT pause timers or webview; background audio continues uninterrupted
         webViewInstance?.let { webView ->
             webView.resumeTimers()
-            SoundwaveWebViewHelper.injectKeepAlive(webView)
+            SoundwaveWebViewHelper.injectMediaBridge(webView)
         }
     }
 
@@ -98,12 +128,21 @@ class MainActivity : ComponentActivity() {
         super.onResume()
         webViewInstance?.let { webView ->
             webView.resumeTimers()
-            SoundwaveWebViewHelper.injectKeepAlive(webView)
+            SoundwaveWebViewHelper.injectMediaBridge(webView)
+        }
+    }
+
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        webViewInstance?.let { webView ->
+            webView.resumeTimers()
+            SoundwaveWebViewHelper.injectMediaBridge(webView)
         }
     }
 
     override fun onDestroy() {
         super.onDestroy()
+        MediaStateManager.setActionListener(null)
         networkMonitor.stopMonitoring()
     }
 }
@@ -111,8 +150,8 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun SoundwaveApp(
     networkMonitor: NetworkMonitor,
-    onGetWebView: () -> WebView?,
-    onSetWebView: (WebView) -> Unit,
+    onGetWebView: () -> KeepAliveWebView?,
+    onSetWebView: (KeepAliveWebView) -> Unit,
     onExitApp: () -> Unit
 ) {
     val context = LocalContext.current
@@ -159,7 +198,7 @@ fun SoundwaveApp(
     }
 
     // Hot-Recovery Signal Engine:
-    // When network reconnects, dismiss offline mask, restore WebView, and reload if failed
+    // When network reconnects, reload web view if previously failed
     LaunchedEffect(isOnline) {
         if (isOnline) {
             val webView = onGetWebView()
@@ -167,9 +206,6 @@ fun SoundwaveApp(
                 hasFatalWebError = false
                 webView?.loadUrl(SoundwaveWebViewHelper.TARGET_URL)
             }
-            webView?.visibility = View.VISIBLE
-        } else {
-            onGetWebView()?.visibility = View.GONE
         }
     }
 
@@ -197,17 +233,18 @@ fun SoundwaveApp(
         modifier = Modifier
             .fillMaxSize()
             .background(SoundwaveDark)
+            .statusBarsPadding()
     ) {
-        // Main WebView Layer (always kept alive in background so audio never drops)
+        // Main KeepAliveWebView Layer (keeps rendering and audio active continuously)
         AndroidView(
             modifier = Modifier.fillMaxSize(),
             factory = { ctx ->
-                val webView = WebView(ctx).apply {
+                val webView = KeepAliveWebView(ctx).apply {
                     layoutParams = ViewGroup.LayoutParams(
                         ViewGroup.LayoutParams.MATCH_PARENT,
                         ViewGroup.LayoutParams.MATCH_PARENT
                     )
-                    setBackgroundColor(0xFF121212.toInt())
+                    setLayerType(View.LAYER_TYPE_NONE, null)
                 }
 
                 SoundwaveWebViewHelper.configureWebView(
@@ -235,13 +272,8 @@ fun SoundwaveApp(
                 webView.loadUrl(SoundwaveWebViewHelper.TARGET_URL)
                 webView
             },
-            update = { webView ->
-                // Ensure correct hardware visibility per network state
-                if (!isOnline) {
-                    webView.visibility = View.GONE
-                } else {
-                    webView.visibility = View.VISIBLE
-                }
+            update = {
+                // Continuously maintained active in background layer
             }
         )
 
