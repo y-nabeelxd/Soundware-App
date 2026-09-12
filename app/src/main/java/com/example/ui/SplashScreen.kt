@@ -1,16 +1,9 @@
 package com.example.ui
 
-import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
@@ -22,8 +15,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -31,7 +22,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -42,7 +32,6 @@ import com.example.ui.theme.SoundwaveGray
 import com.example.ui.theme.SoundwaveGreen
 import com.example.ui.theme.SoundwaveSurfaceVariant
 import com.example.ui.theme.SoundwaveWhite
-import kotlinx.coroutines.delay
 
 @Composable
 fun SplashScreen(
@@ -62,7 +51,7 @@ fun SplashScreen(
             verticalArrangement = Arrangement.Center,
             modifier = Modifier.padding(32.dp)
         ) {
-            // Central Logo
+            // Central App Logo Box
             Box(
                 modifier = Modifier
                     .size(110.dp)
@@ -82,15 +71,6 @@ fun SplashScreen(
 
             Spacer(modifier = Modifier.height(28.dp))
 
-            // Equalizer Wave
-            if (animate) {
-                SoundwaveBarsAnimation()
-            } else {
-                StaticSoundwaveBars()
-            }
-
-            Spacer(modifier = Modifier.height(20.dp))
-
             // App Name
             Text(
                 text = stringResource(id = R.string.app_name),
@@ -102,14 +82,15 @@ fun SplashScreen(
                 modifier = Modifier.testTag("splash_title")
             )
 
-            Spacer(modifier = Modifier.height(6.dp))
+            Spacer(modifier = Modifier.height(8.dp))
 
+            // Subtitle / Attribution: "by LuffyXD | Team XD"
             Text(
                 text = stringResource(id = R.string.splash_subtitle),
                 fontSize = 14.sp,
                 fontWeight = FontWeight.Medium,
                 color = SoundwaveGray,
-                letterSpacing = 2.sp,
+                letterSpacing = 1.5.sp,
                 textAlign = TextAlign.Center
             )
 
@@ -141,77 +122,3 @@ fun SplashScreen(
         }
     }
 }
-
-@Composable
-private fun SoundwaveBarsAnimation() {
-    val barHeights = listOf(
-        remember { Animatable(12f) },
-        remember { Animatable(24f) },
-        remember { Animatable(36f) },
-        remember { Animatable(22f) },
-        remember { Animatable(14f) }
-    )
-
-    val targetHeights = listOf(
-        listOf(24f, 10f, 20f, 14f),
-        listOf(34f, 16f, 30f, 20f),
-        listOf(42f, 20f, 38f, 26f),
-        listOf(32f, 14f, 28f, 18f),
-        listOf(22f, 8f, 18f, 12f)
-    )
-
-    barHeights.forEachIndexed { index, animatable ->
-        LaunchedEffect(animatable) {
-            delay(index * 90L)
-            var step = 0
-            while (true) {
-                val nextTarget = targetHeights[index][step % targetHeights[index].size]
-                animatable.animateTo(
-                    targetValue = nextTarget,
-                    animationSpec = tween(
-                        durationMillis = 350 + (index * 40),
-                        easing = FastOutSlowInEasing
-                    )
-                )
-                step++
-            }
-        }
-    }
-
-    Row(
-        horizontalArrangement = Arrangement.spacedBy(5.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier.height(48.dp)
-    ) {
-        barHeights.forEach { heightAnim ->
-            Box(
-                modifier = Modifier
-                    .width(4.dp)
-                    .height(heightAnim.value.dp)
-                    .clip(RoundedCornerShape(2.dp))
-                    .background(SoundwaveGreen)
-            )
-        }
-    }
-}
-
-@Composable
-private fun StaticSoundwaveBars() {
-    val staticHeights = listOf(14.dp, 26.dp, 38.dp, 24.dp, 16.dp)
-    Row(
-        horizontalArrangement = Arrangement.spacedBy(5.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier.height(48.dp)
-    ) {
-        staticHeights.forEach { height ->
-            Box(
-                modifier = Modifier
-                    .width(4.dp)
-                    .height(height)
-                    .clip(RoundedCornerShape(2.dp))
-                    .background(SoundwaveGreen)
-            )
-        }
-    }
-}
-

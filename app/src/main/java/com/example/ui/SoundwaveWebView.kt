@@ -51,26 +51,44 @@ object SoundwaveWebViewHelper {
                     e.stopImmediatePropagation();
                 }, true);
 
-                // Ensure touch/click on any input or editable element requests the Android software keyboard
-                function attachKeyboardListeners() {
-                    function handleInputActivation(e) {
-                        var target = e.target;
-                        while (target && target !== document.body) {
-                            var tag = (target.tagName || '').toLowerCase();
-                            var isInput = tag === 'input' || tag === 'textarea' || target.isContentEditable;
-                            if (isInput) {
-                                if (window.AndroidMediaBridge && typeof window.AndroidMediaBridge.showKeyboard === 'function') {
-                                    window.AndroidMediaBridge.showKeyboard();
-                                }
-                                break;
-                            }
-                            target = target.parentElement;
-                        }
+                // Ensure touch/click ONLY on actual typeable text inputs (search, playlist name, description, etc.) opens the keyboard
+                function isTypeableInput(elem) {
+                    if (!elem) return false;
+                    var tag = (elem.tagName || '').toLowerCase();
+                    if (tag === 'textarea') return true;
+                    if (elem.isContentEditable) return true;
+                    if (tag === 'input') {
+                        var type = (elem.getAttribute('type') || elem.type || 'text').toLowerCase();
+                        var nonTypeableTypes = ['range', 'checkbox', 'radio', 'button', 'submit', 'reset', 'file', 'image', 'color', 'hidden'];
+                        return nonTypeableTypes.indexOf(type) === -1;
                     }
+                    return false;
+                }
 
-                    document.addEventListener('focusin', handleInputActivation, true);
-                    document.addEventListener('click', handleInputActivation, true);
-                    document.addEventListener('touchstart', handleInputActivation, { passive: true, capture: true });
+                function attachKeyboardListeners() {
+                    document.addEventListener('focusin', function(e) {
+                        if (isTypeableInput(e.target)) {
+                            if (window.AndroidMediaBridge && typeof window.AndroidMediaBridge.showKeyboard === 'function') {
+                                window.AndroidMediaBridge.showKeyboard();
+                            }
+                        }
+                    }, true);
+
+                    document.addEventListener('click', function(e) {
+                        if (isTypeableInput(e.target)) {
+                            if (window.AndroidMediaBridge && typeof window.AndroidMediaBridge.showKeyboard === 'function') {
+                                window.AndroidMediaBridge.showKeyboard();
+                            }
+                        } else {
+                            // If tapped outside typeable fields (e.g. tracks, play controls, progress bar), hide the keyboard
+                            var active = document.activeElement;
+                            if (!isTypeableInput(active)) {
+                                if (window.AndroidMediaBridge && typeof window.AndroidMediaBridge.hideKeyboard === 'function') {
+                                    window.AndroidMediaBridge.hideKeyboard();
+                                }
+                            }
+                        }
+                    }, true);
                 }
                 if (!window.__soundwaveKeyboardAttached) {
                     window.__soundwaveKeyboardAttached = true;

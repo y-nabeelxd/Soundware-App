@@ -1,9 +1,7 @@
 package com.example.ui
 
-import android.annotation.SuppressLint
 import android.content.Context
 import android.util.AttributeSet
-import android.view.MotionEvent
 import android.view.View
 import android.view.inputmethod.InputMethodManager
 import android.webkit.WebView
@@ -11,7 +9,7 @@ import android.webkit.WebView
 /**
  * Custom WebView that:
  * 1. Maintains persistent rendering and execution state for audio in background
- * 2. Fully supports Android soft keyboard (IME) input for search, playlist editing, and inputs
+ * 2. Supports native Android software keyboard (IME) input for search, playlist editing, and text fields
  * 3. Bridges media control operations (play, pause, next, prev, seek)
  */
 class KeepAliveWebView @JvmOverloads constructor(
@@ -21,23 +19,9 @@ class KeepAliveWebView @JvmOverloads constructor(
 ) : WebView(context, attrs, defStyleAttr) {
 
     init {
-        // Crucial for software keyboard input inside WebView
+        // Allow focus for user interaction
         isFocusable = true
         isFocusableInTouchMode = true
-    }
-
-    override fun onCheckIsTextEditor(): Boolean {
-        // Informs Android InputMethodManager that this view accepts text input
-        return true
-    }
-
-    override fun onTouchEvent(event: MotionEvent): Boolean {
-        if (event.action == MotionEvent.ACTION_DOWN) {
-            if (!hasFocus()) {
-                requestFocus()
-            }
-        }
-        return super.onTouchEvent(event)
     }
 
     override fun onWindowVisibilityChanged(visibility: Int) {
@@ -64,7 +48,6 @@ class KeepAliveWebView @JvmOverloads constructor(
 
     fun showKeyboard() {
         post {
-            requestFocus(View.FOCUS_DOWN)
             val imm = context.getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager
             imm?.showSoftInput(this, InputMethodManager.SHOW_IMPLICIT)
         }
@@ -74,7 +57,6 @@ class KeepAliveWebView @JvmOverloads constructor(
         post {
             val imm = context.getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager
             imm?.hideSoftInputFromWindow(windowToken, 0)
-            clearFocus()
         }
     }
 

@@ -17,5 +17,7 @@ class ExampleRobolectricTest {
     val context = ApplicationProvider.getApplicationContext<Context>()
     val appName = context.getString(R.string.app_name)
     assertEquals("Soundwave", appName)
+    val subtitle = context.getString(R.string.splash_subtitle)
+    assertEquals("by LuffyXD | Team XD", subtitle)
   }
 }
