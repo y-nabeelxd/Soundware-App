@@ -82,6 +82,10 @@ class MainActivity : ComponentActivity() {
             override fun onPrevious() {
                 webViewInstance?.previousTrack()
             }
+
+            override fun onSeekTo(posMs: Long) {
+                webViewInstance?.seekTo(posMs / 1000f)
+            }
         })
 
         // Start native hardware network watchdog
@@ -244,7 +248,6 @@ fun SoundwaveApp(
                         ViewGroup.LayoutParams.MATCH_PARENT,
                         ViewGroup.LayoutParams.MATCH_PARENT
                     )
-                    setLayerType(View.LAYER_TYPE_NONE, null)
                 }
 
                 SoundwaveWebViewHelper.configureWebView(

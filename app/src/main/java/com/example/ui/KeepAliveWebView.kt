@@ -105,4 +105,21 @@ class KeepAliveWebView @JvmOverloads constructor(
             )
         }
     }
+
+    fun seekTo(seconds: Float) {
+        post {
+            evaluateJavascript(
+                """
+                (function() {
+                    try {
+                        if (typeof window.__soundwaveSeek === 'function') {
+                            window.__soundwaveSeek($seconds);
+                        }
+                    } catch(e) {}
+                })();
+                """.trimIndent(),
+                null
+            )
+        }
+    }
 }

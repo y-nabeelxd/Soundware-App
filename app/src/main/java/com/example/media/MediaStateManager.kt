@@ -4,14 +4,15 @@ import android.graphics.Bitmap
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import java.lang.ref.WeakReference
 
 data class TrackInfo(
     val title: String = "Soundwave",
     val artist: String = "Find the feeling between the notes",
     val artworkUrl: String = "",
     val artworkBitmap: Bitmap? = null,
-    val isPlaying: Boolean = false
+    val isPlaying: Boolean = false,
+    val positionMs: Long = 0L,
+    val durationMs: Long = 0L
 )
 
 object MediaStateManager {
@@ -25,6 +26,7 @@ object MediaStateManager {
         fun onPlayPause()
         fun onNext()
         fun onPrevious()
+        fun onSeekTo(posMs: Long)
     }
 
     fun setActionListener(listener: MediaActionListener?) {
@@ -36,6 +38,8 @@ object MediaStateManager {
         artist: String,
         artworkUrl: String,
         isPlaying: Boolean,
+        positionMs: Long = 0L,
+        durationMs: Long = 0L,
         bitmap: Bitmap? = null
     ) {
         val cleanTitle = if (title.isBlank() || title == "Untitled track") "Soundwave" else title
@@ -49,7 +53,17 @@ object MediaStateManager {
             artist = cleanArtist,
             artworkUrl = artworkUrl,
             artworkBitmap = bitmapToUse,
-            isPlaying = isPlaying
+            isPlaying = isPlaying,
+            positionMs = positionMs,
+            durationMs = durationMs
+        )
+    }
+
+    fun updateProgress(positionMs: Long, durationMs: Long) {
+        val current = _trackState.value
+        _trackState.value = current.copy(
+            positionMs = positionMs,
+            durationMs = if (durationMs > 0) durationMs else current.durationMs
         )
     }
 
@@ -75,5 +89,11 @@ object MediaStateManager {
 
     fun triggerPrevious() {
         actionListener?.onPrevious()
+    }
+
+    fun triggerSeekTo(posMs: Long) {
+        // Optimistically update local position state immediately so scrubber feels instant
+        updateProgress(posMs, _trackState.value.durationMs)
+        actionListener?.onSeekTo(posMs)
     }
 }

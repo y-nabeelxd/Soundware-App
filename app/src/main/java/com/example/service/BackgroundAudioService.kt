@@ -119,6 +119,10 @@ class BackgroundAudioService : Service() {
                     MediaStateManager.triggerPrevious()
                 }
 
+                override fun onSeekTo(pos: Long) {
+                    MediaStateManager.triggerSeekTo(pos)
+                }
+
                 override fun onStop() {
                     stopSelf()
                 }
@@ -139,8 +143,13 @@ class BackgroundAudioService : Service() {
         }
     }
 
+    private var lastNotificationTrackKey: String = ""
+
     private fun updateNotificationAndSession(track: TrackInfo) {
         // 1. Update MediaSession state & metadata
+        val safePos = track.positionMs.coerceAtLeast(0L)
+        val playbackSpeed = if (track.isPlaying) 1.0f else 0.0f
+
         val stateBuilder = PlaybackState.Builder()
             .setActions(
                 PlaybackState.ACTION_PLAY or
@@ -148,12 +157,13 @@ class BackgroundAudioService : Service() {
                 PlaybackState.ACTION_PLAY_PAUSE or
                 PlaybackState.ACTION_SKIP_TO_NEXT or
                 PlaybackState.ACTION_SKIP_TO_PREVIOUS or
+                PlaybackState.ACTION_SEEK_TO or
                 PlaybackState.ACTION_STOP
             )
             .setState(
                 if (track.isPlaying) PlaybackState.STATE_PLAYING else PlaybackState.STATE_PAUSED,
-                PlaybackState.PLAYBACK_POSITION_UNKNOWN,
-                1.0f
+                safePos,
+                playbackSpeed
             )
 
         mediaSession?.setPlaybackState(stateBuilder.build())
@@ -162,6 +172,7 @@ class BackgroundAudioService : Service() {
             .putString(MediaMetadata.METADATA_KEY_TITLE, track.title)
             .putString(MediaMetadata.METADATA_KEY_ARTIST, track.artist)
             .putString(MediaMetadata.METADATA_KEY_ALBUM, "Soundwave")
+            .putLong(MediaMetadata.METADATA_KEY_DURATION, track.durationMs)
 
         if (track.artworkBitmap != null) {
             metadataBuilder.putBitmap(MediaMetadata.METADATA_KEY_ALBUM_ART, track.artworkBitmap)
@@ -170,17 +181,21 @@ class BackgroundAudioService : Service() {
 
         mediaSession?.setMetadata(metadataBuilder.build())
 
-        // 2. Build Spotify-style Media Notification
-        val notification = buildMediaNotification(track)
+        // 2. Update Foreground Notification when metadata, artwork, duration, or play state changes
+        val currentKey = "${track.title}|${track.artist}|${track.isPlaying}|${track.artworkUrl}|${track.durationMs}"
+        if (currentKey != lastNotificationTrackKey) {
+            lastNotificationTrackKey = currentKey
+            val notification = buildMediaNotification(track)
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            startForeground(
-                NOTIFICATION_ID,
-                notification,
-                ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK
-            )
-        } else {
-            startForeground(NOTIFICATION_ID, notification)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                startForeground(
+                    NOTIFICATION_ID,
+                    notification,
+                    ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK
+                )
+            } else {
+                startForeground(NOTIFICATION_ID, notification)
+            }
         }
     }
 

@@ -26,9 +26,9 @@ object SoundwaveWebViewHelper {
 
     // Injected JavaScript that:
     // 1. Prevents YouTube Iframe and Web Audio from suspending when minimized/backgrounded
-    // 2. Extracts currently playing track metadata (title, artist, artwork) & playback state
-    // 3. Reports state to AndroidMediaBridge so the notification and lockscreen update in real-time
-    // 4. Exposes direct hooks (playPause, next, previous) for native notification actions
+    // 2. Extracts currently playing track metadata (title, artist, artwork, position, duration) & playback state
+    // 3. Reports state and live progress to AndroidMediaBridge so the notification progress bar moves like Spotify
+    // 4. Exposes direct hooks (playPause, next, previous, seek) for native notification actions
     const val INJECTED_MEDIA_BRIDGE_JS = """
         (function() {
             try {
@@ -48,6 +48,37 @@ object SoundwaveWebViewHelper {
                 document.addEventListener('visibilitychange', function(e) {
                     e.stopImmediatePropagation();
                 }, true);
+
+                // Hook YouTube Player constructor to retain direct reference for precise timing & seeking
+                function hookYouTubeAPI() {
+                    try {
+                        if (window.YT && window.YT.Player && !window.YT.Player.__soundwaveHooked) {
+                            var Orig = window.YT.Player;
+                            window.YT.Player = function(id, options) {
+                                var p = new Orig(id, options);
+                                window.__soundwaveYTPlayer = p;
+                                return p;
+                            };
+                            window.YT.Player.prototype = Orig.prototype;
+                            window.YT.Player.__soundwaveHooked = true;
+                        }
+                    } catch(e) {}
+                }
+                hookYouTubeAPI();
+
+                function getPlayerInstance() {
+                    if (window.__soundwaveYTPlayer && typeof window.__soundwaveYTPlayer.getCurrentTime === 'function') {
+                        return window.__soundwaveYTPlayer;
+                    }
+                    if (window.YT && typeof window.YT.get === 'function') {
+                        var p = window.YT.get('youtube-player');
+                        if (p && typeof p.getCurrentTime === 'function') {
+                            window.__soundwaveYTPlayer = p;
+                            return p;
+                        }
+                    }
+                    return null;
+                }
 
                 // Global control functions called by native Android media notification
                 window.__soundwavePlayPause = function() {
@@ -80,13 +111,33 @@ object SoundwaveWebViewHelper {
                     }
                 };
 
+                window.__soundwaveSeek = function(seconds) {
+                    try {
+                        var p = getPlayerInstance();
+                        if (p && typeof p.seekTo === 'function') {
+                            p.seekTo(seconds, true);
+                        }
+                        var slider = document.querySelector('[data-testid="deck-progress"] input[type="range"]') ||
+                                     document.querySelector('input[type="range"]');
+                        if (slider) {
+                            slider.value = seconds;
+                            slider.dispatchEvent(new Event('input', { bubbles: true }));
+                            slider.dispatchEvent(new Event('change', { bubbles: true }));
+                        }
+                        setTimeout(sendMediaUpdate, 100);
+                    } catch(e) {}
+                };
+
                 var lastTitle = '';
                 var lastArtist = '';
                 var lastArt = '';
                 var lastPlaying = null;
+                var lastDur = 0;
 
                 function sendMediaUpdate() {
                     try {
+                        hookYouTubeAPI();
+
                         var titleElem = document.querySelector('[data-testid="deck-track-title"]') ||
                                         document.querySelector('[data-testid="player-modal-title"]') ||
                                         document.querySelector('.deck-track strong');
@@ -127,15 +178,39 @@ object SoundwaveWebViewHelper {
                             }
                         }
 
-                        if (title !== lastTitle || artist !== lastArtist || artwork !== lastArt || isPlaying !== lastPlaying) {
+                        // Retrieve precise position and duration
+                        var currentSec = 0;
+                        var durationSec = 0;
+                        var p = getPlayerInstance();
+                        if (p) {
+                            try {
+                                currentSec = p.getCurrentTime() || 0;
+                                durationSec = p.getDuration() || 0;
+                            } catch(e) {}
+                        }
+
+                        if (durationSec <= 0) {
+                            var slider = document.querySelector('[data-testid="deck-progress"] input[type="range"]') ||
+                                         document.querySelector('input[type="range"]');
+                            if (slider) {
+                                currentSec = parseFloat(slider.value) || 0;
+                                durationSec = parseFloat(slider.max) || 0;
+                            }
+                        }
+
+                        var trackChanged = (title !== lastTitle || artist !== lastArtist || artwork !== lastArt || isPlaying !== lastPlaying || Math.abs(durationSec - lastDur) > 1.0);
+                        if (trackChanged) {
                             lastTitle = title;
                             lastArtist = artist;
                             lastArt = artwork;
                             lastPlaying = isPlaying;
+                            lastDur = durationSec;
 
                             if (window.AndroidMediaBridge) {
-                                window.AndroidMediaBridge.onTrackUpdate(title, artist, artwork, isPlaying);
+                                window.AndroidMediaBridge.onTrackUpdate(title, artist, artwork, isPlaying, currentSec, durationSec);
                             }
+                        } else if (isPlaying && window.AndroidMediaBridge) {
+                            window.AndroidMediaBridge.onProgressUpdate(currentSec, durationSec);
                         }
                     } catch(err) {}
                 }
@@ -143,7 +218,7 @@ object SoundwaveWebViewHelper {
                 // Poll regularly and observe DOM changes
                 if (!window.__soundwaveWatcherStarted) {
                     window.__soundwaveWatcherStarted = true;
-                    setInterval(sendMediaUpdate, 800);
+                    setInterval(sendMediaUpdate, 500);
 
                     var observer = new MutationObserver(function() {
                         sendMediaUpdate();

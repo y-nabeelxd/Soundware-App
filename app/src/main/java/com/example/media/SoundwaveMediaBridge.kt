@@ -1,7 +1,6 @@
 package com.example.media
 
 import android.content.Context
-import android.graphics.Bitmap
 import android.graphics.drawable.BitmapDrawable
 import android.webkit.JavascriptInterface
 import coil.ImageLoader
@@ -22,23 +21,36 @@ class SoundwaveMediaBridge(private val context: Context) {
         title: String?,
         artist: String?,
         artworkUrl: String?,
-        isPlaying: Boolean
+        isPlaying: Boolean,
+        positionSec: Double,
+        durationSec: Double
     ) {
         val safeTitle = title?.trim().orEmpty()
         val safeArtist = artist?.trim().orEmpty()
         val safeArtworkUrl = artworkUrl?.trim().orEmpty()
+        val posMs = (positionSec * 1000.0).toLong().coerceAtLeast(0L)
+        val durMs = (durationSec * 1000.0).toLong().coerceAtLeast(0L)
 
         MediaStateManager.updateTrack(
             title = safeTitle,
             artist = safeArtist,
             artworkUrl = safeArtworkUrl,
-            isPlaying = isPlaying
+            isPlaying = isPlaying,
+            positionMs = posMs,
+            durationMs = durMs
         )
 
         if (safeArtworkUrl.isNotBlank() && safeArtworkUrl != lastLoadedArtworkUrl) {
             lastLoadedArtworkUrl = safeArtworkUrl
             loadArtwork(safeArtworkUrl)
         }
+    }
+
+    @JavascriptInterface
+    fun onProgressUpdate(positionSec: Double, durationSec: Double) {
+        val posMs = (positionSec * 1000.0).toLong().coerceAtLeast(0L)
+        val durMs = (durationSec * 1000.0).toLong().coerceAtLeast(0L)
+        MediaStateManager.updateProgress(posMs, durMs)
     }
 
     @JavascriptInterface
@@ -61,7 +73,7 @@ class SoundwaveMediaBridge(private val context: Context) {
                     }
                 }
             } catch (e: Exception) {
-                // Ignore failure and keep fallback icon
+                // Keep fallback icon if remote artwork fails
             }
         }
     }
