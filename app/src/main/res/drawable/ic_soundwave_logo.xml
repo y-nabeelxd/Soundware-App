@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="96dp"
+    android:height="96dp"
+    android:viewportWidth="96"
+    android:viewportHeight="96">
+    <!-- Asymmetrical Soundwave Equalizer Cross Ripple Emblem -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M16,40 C16,37.8 17.8,36 20,36 C22.2,36 24,37.8 24,40 L24,56 C24,58.2 22.2,60 20,60 C17.8,60 16,58.2 16,56 Z" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M30,28 C30,25.8 31.8,24 34,24 C36.2,24 38,25.8 38,28 L38,68 C38,70.2 36.2,72 34,72 C31.8,72 30,70.2 30,68 Z" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M44,14 C44,11.8 45.8,10 48,10 C50.2,10 52,11.8 52,14 L52,82 C52,84.2 50.2,86 48,86 C45.8,86 44,84.2 44,82 Z" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M58,22 C58,19.8 59.8,18 62,18 C64.2,18 66,19.8 66,22 L66,74 C66,76.2 64.2,78 62,78 C59.8,78 58,76.2 58,74 Z" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M72,34 C72,31.8 73.8,30 76,30 C78.2,30 80,31.8 80,34 L80,62 C80,64.2 78.2,66 76,66 C73.8,66 72,64.2 72,62 Z" />
+</vector>

@@ -1,0 +1,6 @@
+{
+  "name": "Soundwave",
+  "description": "Soundwave music player web app with persistent background audio playback, instant network watchdog, and seamless offline recovery.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

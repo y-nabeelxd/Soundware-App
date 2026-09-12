@@ -1,0 +1,12 @@
+<resources>
+    <string name="app_name">Soundwave</string>
+    <string name="splash_subtitle">Music Streamer</string>
+    <string name="offline_title">Connection Dropped</string>
+    <string name="offline_subtitle">Looking for network signal...</string>
+    <string name="retry_button">Retry Now</string>
+    <string name="exit_prompt">Press back again to exit</string>
+    <string name="notification_title">Soundwave</string>
+    <string name="notification_text">Music playing in background</string>
+    <string name="notification_channel_name">Background Music Playback</string>
+    <string name="notification_channel_desc">Keeps music streaming active while app is minimized</string>
+</resources>

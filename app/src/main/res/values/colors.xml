@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Soundwave Palette -->
+    <color name="soundwave_black">#121212</color>
+    <color name="soundwave_surface">#181818</color>
+    <color name="soundwave_surface_highlight">#282828</color>
+    <color name="soundwave_green">#1DB954</color>
+    <color name="soundwave_green_bright">#1ED760</color>
+    <color name="soundwave_white">#FFFFFF</color>
+    <color name="soundwave_gray">#B3B3B3</color>
+    <color name="soundwave_subtext">#6A6A6A</color>
+
+    <color name="black">#FF000000</color>
+    <color name="white">#FFFFFFFF</color>
+</resources>

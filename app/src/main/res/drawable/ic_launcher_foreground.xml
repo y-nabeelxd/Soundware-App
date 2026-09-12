@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Soundwave Equalizer Ripple Geometric Motif in Crisp Solid White #FFFFFF -->
+    <!-- Bar 1 (Left low) -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M30,46 C30,44.3 31.3,43 33,43 C34.7,43 36,44.3 36,46 L36,62 C36,63.7 34.7,65 33,65 C31.3,65 30,63.7 30,62 Z" />
+    <!-- Bar 2 (Mid-left rise) -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M40,36 C40,34.3 41.3,33 43,33 C44.7,33 46,34.3 46,36 L46,72 C46,73.7 44.7,75 43,75 C41.3,75 40,73.7 40,72 Z" />
+    <!-- Bar 3 (Center peak) -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M51,26 C51,24.3 52.3,23 54,23 C55.7,23 57,24.3 57,26 L57,82 C57,83.7 55.7,85 54,85 C52.3,85 51,83.7 51,82 Z" />
+    <!-- Bar 4 (Mid-right dynamic pulse) -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M62,32 C62,30.3 63.3,29 65,29 C66.7,29 68,30.3 68,32 L68,76 C68,77.7 66.7,79 65,79 C63.3,79 62,77.7 62,76 Z" />
+    <!-- Bar 5 (Right tail) -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M72,42 C72,40.3 73.3,39 75,39 C76.7,39 78,40.3 78,42 L78,66 C78,67.7 76.7,69 75,69 C73.3,69 72,67.7 72,66 Z" />
+</vector>
